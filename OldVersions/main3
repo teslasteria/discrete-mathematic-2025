@@ -1,0 +1,157 @@
+import random
+
+def mod_exp(base, exp, mod):
+    result = 1
+    while exp > 0:
+        if exp % 2 == 1:
+            result = (result * base) % mod
+        base = (base * base) % mod
+        exp //= 2
+    return result
+
+# Тест Миллера-Рабина для проверки числа на простоту
+def miller_rabin(n, k=5):
+    if n == 2 or n == 3:
+        return True
+    if n < 2 or n % 2 == 0:
+        return False
+
+    # Представляем n-1 в виде d * 2^r, где d нечетное
+    r, d = 0, n - 1
+    while d % 2 == 0:
+        d //= 2
+        r += 1
+
+    # Применяем тест k раз
+    for _ in range(k):
+        a = random.randint(2, n - 2)
+        x = mod_exp(a, d, n)
+        if x == 1 or x == n - 1:
+            continue
+        for _ in range(r - 1):
+            x = mod_exp(x, 2, n)
+            if x == n - 1:
+                break
+        else:
+            return False
+    return True
+
+# Генерация случайного простого числа
+def generate_prime(bits):
+    while True:
+        # Генерируем случайное нечётное число с указанным количеством бит
+        prime_candidate = random.getrandbits(bits)
+        prime_candidate |= (1 << (bits - 1)) | 1
+
+        # Проверяем, является ли число простым
+        if miller_rabin(prime_candidate):
+            return prime_candidate
+# Функция для нахождения наибольшего общего делителя (алгоритм Евклида)
+def gcd(a, b):
+    while b:
+        a, b = b, a % b
+    return a
+
+# Расширенный алгоритм Евклида для нахождения обратного по модулю
+def mod_inverse(e, phi):
+    old_r, r = e, phi
+    old_s, s = 1, 0
+
+    while r != 0:
+        quotient = old_r // r
+        old_r, r = r, old_r - quotient * r
+        old_s, s = s, old_s - quotient * s
+
+    if old_r > 1:
+        raise Exception("e и φ(n) не взаимно просты")
+    if old_s < 0:
+        old_s += phi
+
+    return old_s
+
+
+# Функция для генерации ключей
+def generate_keys(bits=1024):
+    # Генерируем два случайных простых числа p и q
+    p = generate_prime(bits)
+    q = generate_prime(bits)
+
+    # Вычисляем n и функцию Эйлера
+    n = p * q
+    phi_n = (p - 1) * (q - 1)
+
+    # Выбираем e (стандартное значение 65537)
+    e = 65537
+
+    # Проверяем, что gcd(e, phi_n) == 1
+    if gcd(e, phi_n) != 1:
+        raise Exception("e не взаимно просто с φ(n)")
+
+    # Находим d: d * e ≡ 1 (mod φ(n))
+    d = mod_inverse(e, phi_n)
+
+    return (n, e, d)
+
+# Функция для шифрования
+def encrypt(message, e, n):
+    message_int = int.from_bytes(message.encode('utf-8'), byteorder='big')
+    cipher = mod_exp(message_int, e, n)
+    return cipher
+
+# Функция для расшифрования
+def decrypt(cipher, d, n):
+    decrypted_int = mod_exp(cipher, d, n)
+    decrypted_bytes = decrypted_int.to_bytes((decrypted_int.bit_length() + 7) // 8, byteorder='big')
+    return decrypted_bytes.decode('utf-8')
+
+# Основная программа
+if __name__ == '__main__':
+    # Генерация ключей
+    n, e, d = generate_keys(1024)
+    while True:
+        print("1. Сгенерировать новые ключи\n2. Показать публичный ключ\n3. Зашифровать сообщение \n4. Расшифровать сообщение\n5. Сохранить ключи\n6. Загрузить ключи из файла")
+
+        a = str(input())
+        if a=="1":
+            n, e, d = generate_keys(1024)
+        elif a=="2":
+            print(str(n) + "\n" + str(e))
+        elif a=="3":
+            print("Введите текст:")
+            message =str(input())
+            print("Зашифровать сообщение\n1. Своими ключами \n2. Чужими ключами")
+            g=str(input())
+            if (g=="1"):
+                cipher=encrypt(message, e, n)
+                print("Зашифрованное сообщение:" + str(cipher))
+            elif (g=="2"):
+                print("Введите публичные ключи")
+                pubkey1=int(input())
+                pubkey2=int(input())
+                cipher = encrypt(message,pubkey2,pubkey1)
+                print("Зашифрованное сообщение:" + str(cipher))
+            else:
+                print("Вы неправильно ввели команду")
+        elif a=="4":
+            print("Введите зашифрованный текст: ")
+            message=int(input())
+            decrypted_message = decrypt(message,d,n)
+            print("Расшифрованное сообщение:" + str(decrypted_message))
+        elif a=="5":
+            file = open("key.txt", "w")
+            file.write(str(n) + "\n" + str(e) + "\n" +str(d) )
+        elif a=="6":
+            file= open("key.txt", "r")
+            k=0
+            for i in file:
+                if k==0:
+                    n=int(i)
+                    k=1
+                elif k==1:
+                    e=int(i)
+                    k=2
+                elif k==2:
+                    d=int(i)
+                    k=3
+        else:
+            print("Вы неправильно ввели команду\n")
